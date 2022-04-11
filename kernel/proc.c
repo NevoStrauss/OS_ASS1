@@ -6,6 +6,9 @@
 #include "proc.h"
 #include "defs.h"
 
+double pause_finish_tick;
+
+
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -438,7 +441,10 @@ void
 scheduler(void)
 {
   struct proc *p;
+  
   struct cpu *c = mycpu();
+  int process_ind = 0;
+  
   
   c->proc = 0;
   for(;;){
@@ -446,6 +452,13 @@ scheduler(void)
     intr_on();
 
     for(p = proc; p < &proc[NPROC]; p++) {
+      //check if its not shell & init processes
+      if(process_ind > 2){
+        //pause_system 
+        while (pause_finish_tick - ticks > 0){
+          //do nothing - busy wait
+        }
+      }
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
         // Switch to chosen process.  It is the process's job
@@ -461,6 +474,7 @@ scheduler(void)
       }
       release(&p->lock);
     }
+    process_ind = 0;
   }
 }
 
@@ -653,4 +667,24 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int pause_system(int seconds) {
+  pause_finish_tick = ticks + (seconds * int(10e6));
+  return 1;
+}
+
+int kill_system() {
+{
+  struct proc *p;
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    p->killed = 1;
+    if(p->state == SLEEPING){
+      // Wake process from sleep().
+      p->state = RUNNABLE;
+    }
+    release(&p->lock);   
+  }
+  return 0;
 }
