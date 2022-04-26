@@ -6,7 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 
-double pause_finish_tick;
+uint64 pause_finish_tick = 0;
 
 
 struct cpu cpus[NCPU];
@@ -443,24 +443,16 @@ scheduler(void)
   struct proc *p;
   
   struct cpu *c = mycpu();
-  int process_ind = 0;
   
   
   c->proc = 0;
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
-
     for(p = proc; p < &proc[NPROC]; p++) {
-      //check if its not shell & init processes
-      if(process_ind > 2){
-        //pause_system 
-        while (pause_finish_tick - ticks > 0){
-          //do nothing - busy wait
-        }
-      }
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
+      //check if its not shell & init processes
+      if(p->state == RUNNABLE && (p->pid <= 2 || pause_finish_tick <= ticks)){
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
@@ -474,7 +466,6 @@ scheduler(void)
       }
       release(&p->lock);
     }
-    process_ind = 0;
   }
 }
 
@@ -670,21 +661,20 @@ procdump(void)
 }
 
 int pause_system(int seconds) {
-  pause_finish_tick = ticks + (seconds * int(10e6));
-  return 1;
+  pause_finish_tick = ticks + (seconds * 10);
+  yield();
+  return 0;
 }
 
-int kill_system() {
+int kill_system() 
 {
   struct proc *p;
   for(p = proc; p < &proc[NPROC]; p++){
-    acquire(&p->lock);
-    p->killed = 1;
-    if(p->state == SLEEPING){
-      // Wake process from sleep().
-      p->state = RUNNABLE;
+    if(p->pid == 1 || p->pid == 2){
+      continue;
     }
-    release(&p->lock);   
-  }
-  return 0;
+    if (kill(p->pid) == -1)
+        return -1;
+    }
+    return 0;
 }
