@@ -106,6 +106,12 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 int             pause_system(int);
 int             kill_system(void);
+int             should_run_process(struct proc* p);
+void            set_cpu_ticks(struct proc *p);
+void            run_process(struct proc *p, struct cpu *c);
+void            rr_sched(void) __attribute__((noreturn));
+void            sjf_sched(void) __attribute__((noreturn));
+void            fcfs_sched(void) __attribute__((noreturn));
 
 
 // swtch.S

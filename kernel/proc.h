@@ -106,4 +106,9 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int is_paused;               // 0 false, 1 true
+  uint64 mean_ticks;
+  uint64 last_ticks_running;   // last running time
+  uint64 last_ticks_runnable; // last runnable time
+  uint64 start_running_ticks;
+  uint64 start_runnable_ticks;
 };
