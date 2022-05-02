@@ -103,11 +103,18 @@ sys_pause_system(void)
   if(argint(0, &seconds) < 0){
     return -1;
   }
-  return pause_system(seconds); //todo
+  return pause_system(seconds); 
 }
 
 uint64
 sys_kill_system(void)
 {
-  return kill_system(); //todo
+  return kill_system(); 
+}
+
+uint64
+sys_print_stats(void)
+{
+  print_stats();
+  return 0;
 }

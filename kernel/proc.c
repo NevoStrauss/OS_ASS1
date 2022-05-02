@@ -8,6 +8,14 @@
 
 uint64 pause_finish_tick = 0;
 uint64 rate = 5;
+uint64 running_time_mean = 0;
+uint64 runnable_time_mean = 0;
+uint64 sleeping_time_mean = 0;
+uint64 number_process = 0;
+uint64 program_time = 0;
+uint64 start_time;
+uint64 cpu_utilization = 0;
+
 
 struct cpu cpus[NCPU];
 
@@ -58,6 +66,7 @@ void procinit(void)
     initlock(&p->lock, "proc");
     p->kstack = KSTACK((int)(p - proc));
   }
+  start_time = ticks;
 }
 
 // Must be called with interrupts disabled,
@@ -131,8 +140,13 @@ found:
   p->mean_ticks = 0;
   p->last_ticks_running = 0;  
   p->last_ticks_runnable = 0; 
+  p->last_ticks_sleeping = 0;
   p->start_running_ticks = 0;
   p->start_runnable_ticks = 0;
+  p->start_sleeping_ticks = 0;
+  p->total_running_time = 0;
+  p->total_runnable_time = 0;
+  p->total_sleeping_time = 0;
 
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0)
@@ -394,6 +408,13 @@ void exit(int status)
 
   release(&wait_lock);
 
+  sleeping_time_mean = ((sleeping_time_mean * number_process) + p->total_sleeping_time) / (number_process + 1);
+  running_time_mean = ((running_time_mean * number_process) + p->total_running_time) / (number_process + 1) ;
+  runnable_time_mean = ((runnable_time_mean * number_process) + p->total_runnable_time) / (number_process + 1) ;
+  number_process += 1;
+  program_time += p->total_running_time;
+  cpu_utilization = (program_time * 100) / (ticks - start_time);
+
   // Jump into the scheduler, never to return.
   sched();
   panic("zombie exit");
@@ -471,11 +492,9 @@ should_run_process(struct proc* p)
 }
 
 void 
-set_cpu_ticks(struct proc *p)
+set_mean_ticks(struct proc *p)
 {
-  p->last_ticks_running = ticks - p->start_running_ticks;
   p->mean_ticks = ((10 - rate) * p->mean_ticks + p->last_ticks_running * rate) / 10;
-  p->start_runnable_ticks = ticks;
 }
 
 void 
@@ -491,6 +510,7 @@ run_process(struct proc *p, struct cpu *c)
   p->state = RUNNING;
   p->start_running_ticks = ticks;
   p->last_ticks_runnable = ticks - p->start_runnable_ticks;
+  p->total_runnable_time += p->last_ticks_runnable;
   c->proc = p;
   swtch(&c->context, &p->context);
   // Process is done running for now.
@@ -632,7 +652,10 @@ void yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
-  set_cpu_ticks(p);
+  p->start_runnable_ticks = ticks;
+  p->last_ticks_running = ticks - p->start_running_ticks;
+  p->total_running_time += p->last_ticks_running;
+  set_mean_ticks(p);
   sched();
   release(&p->lock);
 }
@@ -677,7 +700,10 @@ void sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
-  set_cpu_ticks(p);
+  p->start_sleeping_ticks = ticks;
+  p->last_ticks_running = ticks - p->start_running_ticks;
+  p->total_running_time += p->last_ticks_running;
+  set_mean_ticks(p);
   sched();
 
   // Tidy up.
@@ -702,6 +728,9 @@ void wakeup(void *chan)
       if (p->state == SLEEPING && p->chan == chan)
       {
         p->state = RUNNABLE;
+        p->last_ticks_sleeping = ticks - p->start_sleeping_ticks;
+        p->total_sleeping_time += p->last_ticks_sleeping;
+        p->start_runnable_ticks = ticks;
       }
       release(&p->lock);
     }
@@ -816,4 +845,14 @@ int kill_system()
       return -1;
   }
   return 0;
+}
+
+void 
+print_stats(){
+    printf("running_time_mean: %d\n", running_time_mean);
+    printf("number_process: %d\n", number_process);
+    printf("runnable_time_mean: %d\n", runnable_time_mean);
+    printf("sleeping_time_mean: %d\n", sleeping_time_mean);
+    printf("cpu_utilization: %d\n", cpu_utilization);
+    printf("program_time: %d\n", program_time);
 }
